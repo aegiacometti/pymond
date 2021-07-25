@@ -7,7 +7,7 @@ It can:
  - http serve the directory for remote view
  - post a JSON doc to ElasticStack. Note it could be a post to Influxdb/Grafana
 
-###Setup
+### Setup
 
 1. Configure your parameters in `config.py`
 2. Set your userID and installation directory in the file `pymond.service`
