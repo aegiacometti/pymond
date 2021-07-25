@@ -1,0 +1,15 @@
+[Unit]
+Description=pymond - check systemd services and http publish
+After=network.target
+
+[Service]
+User=[your username]
+Group=[your username]
+EnvironmentFile=/etc/environment
+Restart=always
+RestartPreventExitStatus=SIGHUP
+RestartSec=5
+ExecStart=/usr/bin/python3 [your install dir]/pymond.py
+
+[Install]
+WantedBy=default.target
