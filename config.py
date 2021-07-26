@@ -16,8 +16,8 @@ Configure your sample retention period according to the following formula
 pause_between_checks = 60
 samples_to_keep = 300
 
-# specify you data directory for storing the check results
-data_dir = './data/'
+# specify you data directory for storing the check results (relative to the script)
+data_dir = 'data'
 
 # List your systemd services to check
 services = ['sshd', 'containerd']
