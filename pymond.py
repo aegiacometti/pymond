@@ -15,22 +15,24 @@ import socketserver
 import requests
 import config
 
+data_path = "/".join([os.path.dirname(os.path.realpath(sys.argv[0])), config.data_dir])
 
-def clean_old_samples():
-    file_list = [x for x in os.listdir(config.data_dir) if x.endswith('.json')]
-    for service in config.services:
+
+def clean_old_samples(service_file):
+    file_list = [x for x in os.listdir(data_path) if x.endswith('.json')]
+    for service in service_file:
         service_files = [x for x in file_list if x.startswith(service)]
         num_service_samples = len(service_files)
         if num_service_samples > config.samples_to_keep:
             service_files.sort()
-            for x in service_files[:-config.samples_to_keep]:
-                os.remove(config.data_dir + x)
+            for file in service_files[:-config.samples_to_keep]:
+                os.remove("/".join([data_path, file]))
 
 
-def web_server():
+def web_server(dp):
     class Handler(http.server.SimpleHTTPRequestHandler):
         def __init__(self, *args, **kwargs):
-            super().__init__(*args, directory=config.data_dir, **kwargs)
+            super().__init__(*args, directory=dp, **kwargs)
     with socketserver.TCPServer(("", config.http_port), Handler) as httpd:
         print("serving at port", config.http_port)
         httpd.serve_forever()
@@ -43,7 +45,6 @@ def post_to_elk(log_message):
 
 
 def check_services():
-    clean_old_samples()
     for service in config.services:
 
         try:
@@ -62,7 +63,7 @@ def check_services():
         now = datetime.now()
         date = now.strftime("%Y-%m-%d-%H-%M-%S")
         log_message = '{"service":"' + service + '", "date":"' + date + '", "status": "' + status + '"}'
-        with open(f'./data/{service}-{date}-{status}.json', 'w') as file:
+        with open(f'{data_path}/{service}-{date}-{status}.json', 'w') as file:
             file.write(log_message)
 
         if config.elk_enabled:
@@ -70,15 +71,18 @@ def check_services():
 
 
 def start():
-    if not os.path.exists(config.data_dir):
-        os.mkdir(config.data_dir)
+    # Init
+    if not os.path.exists(data_path):
+        os.mkdir(data_path)
 
     if config.web_server_enabled:
-        web = Thread(target=web_server)
+        web = Thread(target=web_server, args=(data_path,))
         web.start()
 
+    # Start
     while True:
         check_services()
+        clean_old_samples()
         sleep(config.pause_between_checks)
 
 
