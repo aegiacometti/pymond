@@ -13,17 +13,29 @@ Configure your sample retention period according to the following formula
  3 months = 129.600 minutes aprox
 """
 
+# CONFIGURATIONS
+
+# Sampling rate
 pause_between_checks = 60
 samples_to_keep = 300
 
 # specify you data directory for storing the check results
-data_dir = './data/'
+data_dir = 'data'
 
 # List your systemd services to check
 services = ['sshd', 'containerd']
 
 # List your IP to test ping
 ip_addresses = ['8.8.8.8']
+count = 4
+timeout = 2000
+
+
+# PUBLISHING RESULTS
+
+# Simple web server
+web_server_enabled = True
+http_port = 8000
 
 # Post to external tool
 elk_enabled = False
@@ -34,6 +46,3 @@ elk_password = '456'
 # Slack Webhook
 slack_enabled = True
 slack_webhook = 'https://hooks.slack.com/services/xxx/yyy/zzz'
-
-web_server_enabled = True
-http_port = 8000
