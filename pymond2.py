@@ -22,22 +22,24 @@ from requests.auth import HTTPBasicAuth
 import json
 import config2 as config
 
+data_path = "/".join([os.path.dirname(os.path.realpath(sys.argv[0])), config.data_dir])
+
 
 def clean_old_samples(service_file):
-    file_list = [x for x in os.listdir(config.data_dir) if x.endswith('.json')]
+    file_list = [x for x in os.listdir(data_path) if x.endswith('.json')]
     for service in service_file:
         service_files = [x for x in file_list if x.startswith(service)]
         num_service_samples = len(service_files)
         if num_service_samples > config.samples_to_keep:
             service_files.sort()
-            for x in service_files[:-config.samples_to_keep]:
-                os.remove(config.data_dir + x)
+            for file in service_files[:-config.samples_to_keep]:
+                os.remove("/".join([data_path, file]))
 
 
-def web_server():
+def web_server(dp):
     class Handler(http.server.SimpleHTTPRequestHandler):
         def __init__(self, *args, **kwargs):
-            super().__init__(*args, directory=config.data_dir, **kwargs)
+            super().__init__(*args, directory=dp, **kwargs)
     with socketserver.TCPServer(("", config.http_port), Handler) as httpd:
         print("serving at port", config.http_port)
         httpd.serve_forever()
@@ -76,7 +78,7 @@ def logging(svc, sts, prev_status):
     now = datetime.now()
     date = now.strftime("%Y-%m-%d-%H-%M-%S")
     log_message = '{"service":"' + svc + '", "date":"' + date + '", "status": "' + sts + '"}'
-    with open(f'./data/{svc}-{date}-{sts}.json', 'w') as file:
+    with open(f'{data_path}/{svc}-{date}-{sts}.json', 'w') as file:
         file.write(log_message)
 
     if config.elk_enabled:
@@ -89,7 +91,10 @@ def logging(svc, sts, prev_status):
 
 def check_ip_address(ip_address, prev_status):
     try:
-        stdout = subprocess.check_output(['ping', '-c 4', ip_address]).decode(sys.stdout.encoding)
+        stdout = subprocess.check_output(['ping',
+                                          f'-c {config.count}',
+                                          f'-W {config.timeout}',
+                                          ip_address]).decode(sys.stdout.encoding)
 
     except subprocess.CalledProcessError:
         status = 'down'
@@ -105,11 +110,12 @@ def check_ip_address(ip_address, prev_status):
 
 
 def start():
-    if not os.path.exists(config.data_dir):
-        os.mkdir(config.data_dir)
+    # Init
+    if not os.path.exists(data_path):
+        os.mkdir(data_path)
 
     if config.web_server_enabled:
-        web = Thread(target=web_server)
+        web = Thread(target=web_server, args=(data_path,))
         web.start()
 
     service_previous_status = {}
@@ -120,6 +126,7 @@ def start():
     for ip_address in config.ip_addresses:
         ip_previous_status[ip_address] = 'up'
 
+    # Start
     while True:
         with ThreadPoolExecutor() as executor:
 
