@@ -41,20 +41,26 @@ def web_server(dp):
         def __init__(self, *args, **kwargs):
             super().__init__(*args, directory=dp, **kwargs)
     with socketserver.TCPServer(("", config.http_port), Handler) as httpd:
-        print("serving at port", config.http_port)
         httpd.serve_forever()
 
 
 def post_to_elk(log_message):
     headers = {'Content-Type': 'application/json'}
     auth = HTTPBasicAuth(config.elk_user, config.elk_password)
-    requests.post(config.elk_url, auth=auth, headers=headers, json=json.loads(log_message))
+    requests.post(config.elk_url, auth=auth, headers=headers,
+                  json=json.loads(log_message),
+                  timeout=config.pause_between_checks)
 
 
 def post_to_slack(log_message):
     headers = {'Content-Type': 'application/json'}
     message = {"text": log_message}
-    requests.post(config.slack_webhook, headers=headers, json=message)
+    try:
+        requests.post(config.slack_webhook, headers=headers,
+                      json=message,
+                      timeout=config.pause_between_checks)
+    except ConnectionError:
+        pass
 
 
 def check_services(service, prev_status):
@@ -74,6 +80,26 @@ def check_services(service, prev_status):
     logging(service, status, prev_status)
 
 
+def check_ip_address(ip_address, prev_status):
+    try:
+        stdout = subprocess.check_output(['ping',
+                                          f'-c {config.count}',
+                                          f'-W {config.timeout}',
+                                          ip_address],
+                                         timeout=config.pause_between_checks).decode(sys.stdout.encoding)
+
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
+        status = 'down'
+
+    else:
+        match = re.search(r'(.*) packets transmitted, (.*) received', stdout)
+        if match.group(1) == match.group(2):
+            status = 'up'
+        else:
+            status = 'loss'
+    logging(ip_address, status, prev_status)
+
+
 def logging(svc, sts, prev_status):
     now = datetime.now()
     date = now.strftime("%Y-%m-%d-%H-%M-%S")
@@ -85,28 +111,9 @@ def logging(svc, sts, prev_status):
         post_to_elk(log_message)
 
     if config.slack_enabled and prev_status[svc] != sts:
-        post_to_slack(f'Service {svc} - {sts}')
+        post = Thread(target=post_to_slack, args=(f'Service {svc} - {sts}',))
+        post.start()
         prev_status[svc] = sts
-
-
-def check_ip_address(ip_address, prev_status):
-    try:
-        stdout = subprocess.check_output(['ping',
-                                          f'-c {config.count}',
-                                          f'-W {config.timeout}',
-                                          ip_address]).decode(sys.stdout.encoding)
-
-    except subprocess.CalledProcessError:
-        status = 'down'
-
-    else:
-        match = re.search(r'(.*) packets transmitted, (.*) received', stdout)
-        if match.group(1) == match.group(2):
-            status = 'up'
-        else:
-            status = 'loss'
-
-    logging(ip_address, status, prev_status)
 
 
 def start():
@@ -129,13 +136,11 @@ def start():
     # Start
     while True:
         with ThreadPoolExecutor() as executor:
-
             for service in config.services:
                 executor.submit(check_services, service, service_previous_status)
 
             for ip_address in config.ip_addresses:
                 executor.submit(check_ip_address, ip_address, ip_previous_status)
-
         clean_old_samples(config.services)
         clean_old_samples(config.ip_addresses)
         sleep(config.pause_between_checks)
