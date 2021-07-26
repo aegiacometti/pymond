@@ -34,19 +34,19 @@ def web_server(dp):
         def __init__(self, *args, **kwargs):
             super().__init__(*args, directory=dp, **kwargs)
     with socketserver.TCPServer(("", config.http_port), Handler) as httpd:
-        print("serving at port", config.http_port)
         httpd.serve_forever()
 
 
 def post_to_elk(log_message):
     headers = {'Content-Type': 'application/json'}
     auth = HTTPBasicAuth(config.elk_user, config.elk_password)
-    requests.post(config.elk_url, auth=auth, headers=headers, json=json.loads(log_message))
+    requests.post(config.elk_url, auth=auth, headers=headers,
+                  json=json.loads(log_message),
+                  timeout=config.pause_between_checks)
 
 
 def check_services():
     for service in config.services:
-
         try:
             stdout = subprocess.check_output(['service', service, 'status']).decode(sys.stdout.encoding)
 
@@ -82,7 +82,7 @@ def start():
     # Start
     while True:
         check_services()
-        clean_old_samples()
+        clean_old_samples(config.services)
         sleep(config.pause_between_checks)
 
 
